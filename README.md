@@ -145,7 +145,7 @@ APAGENT_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 
 ## 更新升级
 
-> 升级只换程序、不动数据：Postgres 数据卷 `pgdata`、`./data`（jwt.key / SQLite 等）、`./skills` 都会保留。**数据库迁移无需手动执行**——`apagent` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`），即“重启即迁移”。升级前仍建议先备份 `./data` 与数据库。
+> 升级只换程序、不动数据：Postgres 数据卷 `pgdata`、`./data`（traffic 录制等）、`./keys`（JWT 签名密钥，容器重建后已登录会话不会失效）、`./skills` 都会保留。**数据库迁移无需手动执行**——`apagent` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`），即“重启即迁移”。升级前仍建议先备份 `./data` 与数据库。
 
 ### 方式一：页面一键更新（推荐）
 

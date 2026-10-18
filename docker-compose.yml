@@ -30,13 +30,19 @@ services:
       APAGENT_LLM_MODEL: ${APAGENT_LLM_MODEL:-}
       APAGENT_LLM_BASE_URL: ${APAGENT_LLM_BASE_URL:-}
       APAGENT_LLM_PROXY: ${APAGENT_LLM_PROXY:-}
+      # JWT 签名密钥目录。必须落在持久化卷里，否则每次重建容器都会重新生成密钥，
+      # 把所有已登录会话踢下线（数据与管理员密码不受影响，但要重新登录）。
+      APAGENT_KEY_DIR: /app/keys
     ports:
       - "8787:8787"
       - "127.0.0.1:8788:8788"
     volumes:
-      # 把数据目录（含 jwt.key、SQLite 等）绑定到项目根目录的 data/，
-      # 方便在宿主机直接查看/备份，容器重建也不丢。
+      # 工作目录（traffic 录制等）绑定到项目根目录的 data/，方便在宿主机直接查看/备份。
+      # 注意：JWT 签名密钥刻意不放这里（它不应该能被文件管理器浏览/下载），
+      # 而是单独落在下面的 ./keys。
       - ./data:/app/data
+      # JWT 签名密钥（当前密钥仅 32 字节）；容器重建后会话仍然有效。
+      - ./keys:/app/keys
       # 把项目根目录的 skills 挂进容器（覆盖镜像内置的 /app/skills）；
       # 改 skill 无需重建镜像，容器读的就是宿主机这份。
       - ./skills:/app/skills

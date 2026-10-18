@@ -51,10 +51,18 @@ func main() {
 }
 
 func run() int {
+	// JWT 签名密钥所在目录。默认在可执行文件同级目录（刻意不放在可浏览的 dataDir
+	// 里，避免被文件管理器直接下载）。容器部署必须用 APAGENT_KEY_DIR 指向持久化卷，
+	// 否则每次重建容器都会重新生成密钥，把已登录会话全部踢下线。
+	defaultKeyDir := config.BaseDir()
+	if v := os.Getenv("APAGENT_KEY_DIR"); v != "" {
+		defaultKeyDir = v
+	}
 	var (
 		addr    = flag.String("addr", ":8787", "HTTP listen address")
 		dataDir = flag.String("data", filepath.Join(config.BaseDir(), "data"), "data directory for SQLite stores (default: data/ next to the executable)")
 		proxy   = flag.String("proxy", "127.0.0.1:8788", "traffic recording proxy address (empty to disable)")
+		keyDir  = flag.String("keydir", defaultKeyDir, "directory holding the JWT signing key (default: next to the executable; APAGENT_KEY_DIR overrides)")
 	)
 	flag.Parse()
 
@@ -112,7 +120,7 @@ func run() int {
 		skillDir = abs
 	}
 	log.Printf("[config] skill 目录: %s", skillDir)
-	srv := server.New(ctx, mgr, skillDir, *dataDir, config.BaseDir())
+	srv := server.New(ctx, mgr, skillDir, *dataDir, *keyDir)
 	httpSrv := &http.Server{
 		Addr:              *addr,
 		Handler:           srv.Handler(),
