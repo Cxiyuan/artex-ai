@@ -6,6 +6,12 @@ on:
 permissions:
   contents: write # 创建 Release 需要
 
+# 与 build-macos-intel.yml 共用并发组：两个工作流都会往同一个 Release 挂
+# SHA256SUMS，串行执行才能保证清单不互相覆盖。
+concurrency:
+  group: release-assets-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   # ① 前端静态导出（一次），产物给交叉编译各平台复用
   frontend:
@@ -26,7 +32,9 @@ jobs:
           name: web-dist
           path: web/out
 
-  # ② 五平台交叉编译（内嵌前端）+ 打 zip
+  # ② 四平台交叉编译（内嵌前端）+ 打 zip
+  #    macOS Intel（darwin/amd64）由 build-macos-intel.yml 在原生 Intel 机器上构建，
+  #    这里不再重复产出同名资产（否则两个工作流会抢同一个 zip 名）。
   binaries:
     needs: frontend
     runs-on: ubuntu-latest
@@ -35,7 +43,6 @@ jobs:
         include:
           - { goos: linux, goarch: amd64 }
           - { goos: linux, goarch: arm64 }
-          - { goos: darwin, goarch: amd64 }
           - { goos: darwin, goarch: arm64 }
           - { goos: windows, goarch: amd64 }
     steps:
@@ -88,7 +95,25 @@ jobs:
           path: dist
       - name: Generate checksums
         working-directory: dist
-        run: sha256sum *.zip > SHA256SUMS
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha256sum *.zip > SHA256SUMS.new
+          # 保留同一 Release 上 build-macos-intel.yml 产出的 darwin/amd64 校验和，
+          # 否则会把它冲掉，导致 macOS Intel 的一键更新拒装。
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release download "$GITHUB_REF_NAME" -p SHA256SUMS -D "$RUNNER_TEMP/old" || true
+          fi
+          if [ -s "$RUNNER_TEMP/old/SHA256SUMS" ]; then
+            cat SHA256SUMS.new "$RUNNER_TEMP/old/SHA256SUMS" \
+              | awk 'NF>=2 && !seen[$2]++' \
+              | sort -k2 > SHA256SUMS
+            rm -f SHA256SUMS.new
+          else
+            mv SHA256SUMS.new SHA256SUMS
+          fi
+          cat SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           files: |
