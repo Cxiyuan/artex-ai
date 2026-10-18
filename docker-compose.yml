@@ -15,7 +15,10 @@ services:
     restart: unless-stopped
 
   apagent:
-    image: artex-ai:${APAGENT_TAG:-latest}
+    # 直接拉 CI 产出的多架构镜像（.github/workflows/build-docker.yml → ghcr.io）。
+    # 固定版本：在 .env 里设 APAGENT_IMAGE=ghcr.io/cxiyuan/artex-ai:v2.2.0
+    # （私有包需先 docker login ghcr.io；自建镜像则设 APAGENT_IMAGE=artex-ai:latest）
+    image: ${APAGENT_IMAGE:-ghcr.io/cxiyuan/artex-ai:latest}
     depends_on:
       postgres:
         condition: service_healthy

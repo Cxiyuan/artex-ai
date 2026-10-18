@@ -45,8 +45,22 @@ install_docker(){
   else
     info "沿用已存在的 .env"
   fi
-  info "拉取镜像并启动…"
-  docker compose pull || true
+  info "拉取镜像（来源：ghcr.io，私有包需登录）…"
+  if ! docker compose pull; then
+    warn "拉取失败：ghcr 上的镜像可能是私有包，需要先登录"
+    if [ "$(ask '现在登录 ghcr.io？(y/n)' y)" = y ]; then
+      local gh_user gh_token
+      gh_user="$(ask 'GitHub 用户名' "${USER:-}")"
+      info "粘贴 PAT（需 read:packages 权限，输入不回显）后回车："
+      read -rs gh_token; echo
+      [ -n "${gh_token:-}" ] || die "未提供 PAT"
+      printf '%s' "$gh_token" | docker login ghcr.io -u "$gh_user" --password-stdin \
+        || die "ghcr.io 登录失败"
+      docker compose pull || die "仍然拉取失败：请确认包名与 PAT 的 read:packages 权限"
+    else
+      die "已取消；稍后 docker login ghcr.io 后再执行 docker compose up -d"
+    fi
+  fi
   docker compose up -d
   ok "启动完成 → http://localhost:8787"
   info "查看日志：docker compose logs -f apagent"

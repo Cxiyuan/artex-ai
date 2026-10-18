@@ -76,7 +76,7 @@ cd artex-ai
 
 脚本会：检测 / 自动安装 Docker → 让你选 **① 全部 Docker** 或 **② 本地编译运行**：
 
-- **① 全部 Docker**：填一个 Postgres 密码（可回车随机）→ 自动写 `.env` → `docker compose up -d`。
+- **① 全部 Docker**：填一个 Postgres 密码（可回车随机）→ 自动写 `.env` → 从 **ghcr.io 拉 CI 构建的镜像** → `docker compose up -d`（私有包会提示登录 ghcr）。
 - **② 本地运行**：选数据库（连已有 / 用 Docker 起一个）→ 生成 `config.json` → `go` 编译内嵌单二进制 → 启动。
 
 装好后打开 **http://localhost:8787**（首次进入 `/setup` 设置管理员密码）。
@@ -86,14 +86,11 @@ cd artex-ai
 ```bash
 git clone https://github.com/Cxiyuan/artex-ai.git
 cd artex-ai
-
-# 1) 先构建前端静态产物 + Linux 单二进制（放到镜像期望的 dist/<arch>/ 下）
-APAGENT_OUTPUT=dist/arm64/apagent ./build.sh --target linux/arm64   # Intel 宿主用 linux/amd64
-
-# 2) 构建本地镜像（tag 与 compose 里的 image 对齐），再启动 postgres + apagent
-docker build -t artex-ai:latest .
 cp .env.example .env          # 填 POSTGRES_PASSWORD、可选 ANTHROPIC_API_KEY
-docker compose up -d
+
+# 镜像由 CI 构建并推到 ghcr.io（多架构 amd64/arm64）。私有包需先登录：
+#   echo <PAT> | docker login ghcr.io -u <GitHub 用户名> --password-stdin   # PAT 需 read:packages
+docker compose up -d          # 拉 ghcr.io/cxiyuan/artex-ai:latest + postgres
 # → http://localhost:8787
 ```
 
@@ -160,7 +157,7 @@ APAGENT_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 - **随时可回退**：上一版本保留为 `apagent.old`，卡片上有「回滚到上一版本」。注意数据库结构不会回退。
 - **更新会中断正在运行的任务**——更新即重启，请在空闲时进行。
 - **开发构建不给更新**：版本号是 `dev` 或 `git describe` 带后缀时禁用，避免正式版覆盖掉本地调试的二进制。
-- **Docker 下只换程序、不换镜像**：镜像里的 playwright / nmap 等工具链不会跟着升级，且 `docker compose up -d` 重建容器后会退回镜像自带的版本。要连镜像一起升级请重新 `docker build -t artex-ai:latest .` 后 `docker compose up -d apagent`。
+- **Docker 下只换程序、不换镜像**：镜像里的 playwright / nmap 等工具链不会跟着升级，且 `docker compose up -d` 重建容器后会退回镜像自带的版本。要连镜像一起升级请用 `docker compose pull apagent && docker compose up -d apagent`（拉 CI 新镜像）。
 - 访问 GitHub 需要代理时，在同一页面配置**全局代理**即可，更新链路会走它。更新只从 GitHub 域名下载并强制 HTTPS。
 
 ### 方式二：一键更新脚本
@@ -172,7 +169,7 @@ cd artex-ai
 
 脚本先可选 `git pull` 拉取最新代码，再让你选 **① Docker 更新** 或 **② 本地编译更新**（与 `install.sh` 对应）：
 
-- **① Docker**：可指定目标镜像 tag（回车沿用 `.env` 的 `APAGENT_TAG`，缺省 `latest`）→ 重建本地镜像 `docker build -t artex-ai:<tag> .` → `docker compose up -d`（换新镜像重启即自动迁移）。
+- **① Docker**：可指定目标镜像 tag（回车沿用 `.env` 的 `APAGENT_IMAGE`，缺省 `latest`）→ 拉取 ghcr 新镜像 `docker compose pull apagent` → `docker compose up -d`（换新镜像重启即自动迁移）。
 - **② 本地**：重建前端静态产物 → 重新编译 `./apagent`（完成后重启进程生效）。
 
 ### 方式三：Docker Compose（手动）
@@ -180,9 +177,9 @@ cd artex-ai
 ```bash
 cd artex-ai
 git pull                       # 更新 compose / 脚本（可选）
-# 自建镜像：重建本地镜像后重启（无上游镜像可拉）
-docker build -t artex-ai:${APAGENT_TAG:-latest} .
-docker compose up -d apagent     # 换新镜像重启 → 自动迁移 schema
+# 镜像由 CI 构建；也可在 .env 设 APAGENT_IMAGE 固定版本（如 :v2.2.0）
+docker compose pull apagent     # 拉 ghcr.io/cxiyuan/artex-ai:latest
+docker compose up -d apagent    # 换新镜像重启 → 自动迁移 schema
 docker image prune -f          # 清理旧镜像（可选）
 ```
 

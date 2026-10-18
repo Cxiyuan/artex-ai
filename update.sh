@@ -27,22 +27,26 @@ update_docker(){
     || die "未检测到 docker / docker compose，请先用 ./install.sh 安装部署"
   [ -f .env ] || die "未找到 .env，请先运行 ./install.sh 完成首次部署"
 
-  # 可选：升级到指定版本 tag（不填则沿用 .env 中的 APAGENT_TAG，缺省为 latest）
+  # 可选：升级到指定版本 tag（不填则沿用 .env 中的 APAGENT_IMAGE，缺省 latest）
   local tag; tag="$(ask '目标镜像 tag（回车沿用 .env / latest）' '')"
   if [ -n "$tag" ]; then
-    if grep -q '^APAGENT_TAG=' .env; then
-      sed -i.bak "s|^APAGENT_TAG=.*|APAGENT_TAG=${tag}|" .env && rm -f .env.bak
+    local image="ghcr.io/cxiyuan/artex-ai:${tag}"
+    if grep -q '^APAGENT_IMAGE=' .env; then
+      sed -i.bak "s|^APAGENT_IMAGE=.*|APAGENT_IMAGE=${image}|" .env && rm -f .env.bak
     else
-      printf '\nAPAGENT_TAG=%s\n' "$tag" >> .env
+      printf '\nAPAGENT_IMAGE=%s\n' "$image" >> .env
     fi
-    ok "已将 APAGENT_TAG 设为 ${tag}"
+    # 老版本 .env 用的是 APAGENT_TAG，已不再生效，顺手清掉免误导
+    sed -i.bak '/^APAGENT_TAG=/d' .env && rm -f .env.bak
+    ok "已将 APAGENT_IMAGE 设为 ${image}"
   fi
 
   # 只动 apagent：postgres 是固定的 16-alpine，不需要跟着升级（拉它纯属浪费带宽，
   # 且大版本变动还会有兼容风险）。apagent 声明了 depends_on postgres，所以带服务名
   # up 时若 pg 没起会自动拉起，已在跑的则原样保留、不重建。
   info "拉取新镜像（仅 apagent）…"
-  docker compose pull apagent
+  docker compose pull apagent \
+    || die "拉取失败：私有包请先 docker login ghcr.io -u <用户名>（PAT 需 read:packages 权限）"
   info "重建并启动（apagent 重启时自动迁移 schema）…"
   docker compose up -d apagent
   ok "更新完成 → http://localhost:8787"
