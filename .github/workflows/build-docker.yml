@@ -1,0 +1,155 @@
+name: build-docker
+
+# 只做一件事：构建并推送多架构 Docker 镜像到 GitHub Container Registry（ghcr.io）。
+#   - 前端静态产物只构建一次，经 -tags embedui 内嵌进 Linux 二进制
+#   - 交叉编译 linux/amd64 + linux/arm64 两份二进制，交给 Dockerfile 按 TARGETARCH 取用
+#   - 镜像 = 运行镜像（python:3.12-slim + nmap/playwright 等工具链 + 预编译二进制）
+#
+# 触发：push 到 main、push v* tag、或手动 Run workflow。
+# 产物：ghcr.io/<owner>/<repo>:{latest, <branch>, <tag>, sha-<短 sha>}
+# 私有仓库时镜像默认也是私有的，拉取前先 docker login ghcr.io。
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write # 推送 ghcr.io 需要
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Resolve version
+        id: ver
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [ "$REF_TYPE" = "tag" ]; then
+            v="${REF_NAME#v}"
+          else
+            v="0.0.0-${SHA:0:7}"
+          fi
+          echo "version=${v}" >> "$GITHUB_OUTPUT"
+          echo "镜像版本：${v}"
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          # go.mod 要求 go >= 1.26.3
+          go-version: "1.26.x"
+          cache: true
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      # 前端只构建一次：两个架构共用同一份静态产物（内嵌进各自二进制）
+      - name: Build frontend static export
+        run: |
+          set -euo pipefail
+          ( cd web && npm ci && npm run build:static )
+          mkdir -p server/webui/dist
+          rsync -a --delete web/out/ server/webui/dist/
+
+      # Dockerfile 取的是 dist/${TARGETARCH}/apagent，所以输出路径必须按架构分目录
+      - name: Cross-compile Linux binaries (amd64 + arm64)
+        env:
+          APAGENT_BUILD_VERSION: ${{ steps.ver.outputs.version }}
+          APAGENT_SKIP_FRONTEND: "1"
+          APAGENT_COMPRESS: "0"
+        run: |
+          set -euo pipefail
+          for arch in amd64 arm64; do
+            APAGENT_OUTPUT="dist/${arch}/apagent" ./build.sh --target "linux/${arch}"
+          done
+          file dist/amd64/apagent dist/arm64/apagent
+          # 二进制必须带可执行位，否则镜像里 start.sh 起不来
+          test -x dist/amd64/apagent
+          test -x dist/arm64/apagent
+
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=tag
+            type=sha,format=short
+            type=raw,value=latest,enable={{ is_default_branch }}
+          labels: |
+            org.opencontainers.image.title=Artex AI
+            org.opencontainers.image.description=LLM 多 agent 驱动的自主渗透测试系统（Go + Next.js + PostgreSQL）
+
+      - name: Build and push multi-arch image
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # 推完立刻把镜像拉回来验证：manifest 是双架构、二进制能跑、工具链与 skills 就位。
+      # 注意必须 --entrypoint ./apagent 绕过 start.sh —— 守护脚本会把非 0/75 的退出码
+      # 当成崩溃并无限重启，直接 `docker run IMG -h` 会挂在这里转圈。
+      - name: Smoke test pushed image
+        env:
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          tag="$(printf '%s\n' "$TAGS" | awk 'NR==1')"
+          echo "== manifest =="
+          docker buildx imagetools inspect "$tag"
+
+          echo "== 二进制可执行性（-h；Go flag 以 2 退出属正常）=="
+          set +e
+          out=$(docker run --rm --platform linux/amd64 --entrypoint ./apagent "$tag" -h 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          if [ "$code" -ne 0 ] && [ "$code" -ne 2 ]; then
+            echo "::error::镜像内二进制无法执行（exit=$code）"
+            exit 1
+          fi
+          grep -qi "usage of" <<<"$out"
+
+          echo "== 镜像内工具链与内置 skills =="
+          docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$tag" -c '
+            set -e
+            nmap --version | awk "NR==1"
+            node -v
+            ls /app/skills
+            ls -l /app/apagent /app/start.sh
+          '
