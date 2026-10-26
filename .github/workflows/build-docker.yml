@@ -3,7 +3,8 @@ name: build-docker
 # 只做一件事：构建并推送多架构 Docker 镜像到 GitHub Container Registry（ghcr.io）。
 #   - 前端静态产物只构建一次，经 -tags embedui 内嵌进 Linux 二进制
 #   - 交叉编译 linux/amd64 + linux/arm64 两份二进制，交给 Dockerfile 按 TARGETARCH 取用
-#   - 镜像 = 运行镜像（python:3.12-slim + nmap/playwright 等工具链 + 预编译二进制）
+#   - 镜像 = 运行镜像（python:3.12-slim + nmap/playwright 等工具链 + 预编译二进制
+#     + skills/ + go-shim.py），运行期不再依赖宿主机挂载这些文件
 #
 # 触发：push 到 main、push v* tag、或手动 Run workflow。
 # 产物：ghcr.io/<owner>/<repo>:{latest, <branch>, <tag>, sha-<短 sha>}
@@ -23,9 +24,6 @@ concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
-
 jobs:
   image:
     runs-on: ubuntu-latest
@@ -35,6 +33,11 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+
+      # ghcr.io 的仓库名必须全小写；github.repository 会保留 Cxiyuan 的大小写。
+      - name: Normalize image name
+        id: image
+        run: echo "name=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - name: Resolve version
         id: ver
@@ -100,7 +103,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@c299e40c65443455700f0fdfc63efafe5b349051 # v5
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ steps.image.outputs.name }}
           tags: |
             type=ref,event=branch
             type=ref,event=tag
@@ -145,11 +148,15 @@ jobs:
           fi
           grep -qi "usage of" <<<"$out"
 
-          echo "== 镜像内工具链与内置 skills =="
+          echo "== 镜像内工具链、内置 skills 与 go-shim =="
           docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$tag" -c '
             set -e
             nmap --version | awk "NR==1"
             node -v
+            python3 --version
+            test -f /app/go-shim.py
+            python3 -m py_compile /app/go-shim.py
+            test -d /app/keys
             ls /app/skills
-            ls -l /app/apagent /app/start.sh
+            ls -l /app/apagent /app/start.sh /app/go-shim.py
           '

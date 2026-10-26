@@ -53,6 +53,9 @@ func validatePassword(pw string) string {
 // the old file removed so it disappears from the workspace. On first run a random
 // key is generated and persisted.
 func loadOrCreateJWTKey(keyDir, dataDir string) ([]byte, error) {
+	if err := os.MkdirAll(keyDir, 0o700); err != nil {
+		return nil, fmt.Errorf("create jwt key dir: %w", err)
+	}
 	path := filepath.Join(keyDir, jwtKeyFilename)
 	// one-time migration out of the old in-workspace location.
 	if legacy := filepath.Join(dataDir, jwtKeyFilename); legacy != path {

@@ -94,7 +94,7 @@ docker compose up -d          # 拉 ghcr.io/cxiyuan/artex-ai:latest + postgres
 # → http://localhost:8787
 ```
 
-镜像已含常用工具（ripgrep/curl/vim/npm/nmap…）；`./skills` 与 `./data` 以绑定挂载持久化。
+镜像已含常用工具（ripgrep/curl/vim/npm/nmap…）以及 `skills/`、`go-shim.py`；只有 `./data`（运行数据）与 `./keys`（JWT 密钥）以绑定挂载持久化。
 
 远程 MCP 可在系统设置中选择 `http`（Streamable HTTP）或 `sse`（旧版 SSE）。
 旧版 SSE 服务通常使用 `GET /sse` 建立事件流，再通过服务返回的
@@ -145,7 +145,7 @@ APAGENT_TARGETS=linux/amd64,windows/amd64 ./build.sh --release
 
 ## 更新升级
 
-> 升级只换程序、不动数据：Postgres 数据卷 `pgdata`、`./data`（traffic 录制等）、`./keys`（JWT 签名密钥，容器重建后已登录会话不会失效）、`./skills` 都会保留。**数据库迁移无需手动执行**——`apagent` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`），即“重启即迁移”。升级前仍建议先备份 `./data` 与数据库。
+> 升级只换程序、不动数据：Postgres 数据卷 `pgdata`、`./data`（traffic 录制等）、`./keys`（JWT 签名密钥，容器重建后已登录会话不会失效）都会保留。`skills/` 与 `go-shim.py` 已打进镜像，改它们需要重新构建镜像。**数据库迁移无需手动执行**——`apagent` 每次启动会幂等重跑 `schema.sql`（含 `ADD COLUMN` / `CREATE INDEX IF NOT EXISTS`），即“重启即迁移”。升级前仍建议先备份 `./data` 与数据库。
 
 ### 方式一：页面一键更新（推荐）
 
@@ -220,6 +220,8 @@ CGO_ENABLED=0 go build -tags embedui -o apagent ./cmd/apagent
 
 **LLM**：`export ANTHROPIC_API_KEY=sk-...`（或 `OPENAI_API_KEY`），也可在 UI 的「LLM 配置」页填写。
 可选：`APAGENT_LLM_PROVIDER` / `APAGENT_LLM_MODEL` / `APAGENT_LLM_BASE_URL` / `APAGENT_LLM_PROXY`。
+
+**OpenCode Go**：镜像内置 `go-shim.py`，容器启动时监听 `127.0.0.1:8399`。在 UI 里新建/编辑 LLM 配置：`provider=openai`、`base_url=http://127.0.0.1:8399`、`model=glm-5.3-flash`（或其他支持 OpenAI chat/completions 的模型），并把「自定义会话头」设为 `x-opencode-session`。`beam-free` 在中国大陆/港澳不可用，不要设为默认。
 
 **并发**：每个任务的 work agent 数在「系统设置」里配置（默认 3）。
 

@@ -5,7 +5,10 @@ web/out
 server/webui/dist
 /apagent
 data
+keys
+.env
 *.db
+*.log
 transcripts
 bench/kv
 bench/debug
