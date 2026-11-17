@@ -4,7 +4,7 @@ name: build-docker
 #   - 前端静态产物只构建一次，经 -tags embedui 内嵌进 Linux 二进制
 #   - 交叉编译 linux/amd64 + linux/arm64 两份二进制，交给 Dockerfile 按 TARGETARCH 取用
 #   - 镜像 = 运行镜像（python:3.12-slim + nmap/playwright 等工具链 + 预编译二进制
-#     + skills/ + go-shim.py），运行期不再依赖宿主机挂载这些文件
+#     + skills/），运行期不再依赖宿主机挂载这些文件
 #
 # 触发：push 到 main、push v* tag、或手动 Run workflow。
 # 产物：ghcr.io/<owner>/<repo>:{latest, <branch>, <tag>, sha-<短 sha>}
@@ -148,15 +148,13 @@ jobs:
           fi
           grep -qi "usage of" <<<"$out"
 
-          echo "== 镜像内工具链、内置 skills 与 go-shim =="
+          echo "== 镜像内工具链与内置 skills =="
           docker run --rm --platform linux/amd64 --entrypoint /bin/sh "$tag" -c '
             set -e
             nmap --version | awk "NR==1"
             node -v
             python3 --version
-            test -f /app/go-shim.py
-            python3 -m py_compile /app/go-shim.py
             test -d /app/keys
             ls /app/skills
-            ls -l /app/apagent /app/start.sh /app/go-shim.py
+            ls -l /app/apagent /app/start.sh
           '

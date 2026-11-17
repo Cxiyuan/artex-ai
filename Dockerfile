@@ -36,10 +36,7 @@ COPY dist/${TARGETARCH}/apagent /app/apagent
 # 它同时负责把 SIGTERM 转发给 apagent —— docker stop 只把信号发给 PID 1，
 # 不转发的话 apagent 收不到、做不了优雅关闭，10 秒后被 SIGKILL 硬杀。
 COPY start.sh /app/start.sh
-# OpenCode Go 适配代理（纯 Python 标准库，基础镜像已带 python3）。
-# 打进镜像而不是挂载宿主机文件，部署时不再依赖仓库外的 ./go-shim.py。
-COPY go-shim.py /app/go-shim.py
-RUN chmod +x /app/apagent /app/start.sh /app/go-shim.py \
+RUN chmod +x /app/apagent /app/start.sh \
     && mkdir -p /app/keys
 COPY skills/ /app/skills/
 # 运行状态：data/（SQLite/流量/日志等）与 keys/（JWT 密钥）持久化。

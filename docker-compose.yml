@@ -24,15 +24,6 @@ services:
     # 固定版本：在 .env 里设 APAGENT_IMAGE=ghcr.io/cxiyuan/artex-ai:v2.2.0
     # （私有包需先 docker login ghcr.io；自建镜像则设 APAGENT_IMAGE=artex-ai:latest）
     image: ${APAGENT_IMAGE:-ghcr.io/cxiyuan/artex-ai:latest}
-    # go-shim.py 已打进镜像（Dockerfile COPY），不再挂载宿主机文件。
-    # 容器启动时先拉起 Go 适配代理，再进原启动脚本；代理崩了会被 while 循环自动拉起。
-    # shim 只监听容器内部 127.0.0.1:8399，不发布端口，artex 用 http://127.0.0.1:8399 访问。
-    # shim 日志走容器标准错误，和 apagent 一起由下面的 logging 配置轮转。
-    entrypoint: ["/bin/sh", "-c"]
-    command:
-      - |
-        while true; do python3 /app/go-shim.py 8399 || sleep 2; done &
-        exec /app/start.sh -addr :8787 -proxy :8788
     depends_on:
       postgres:
         condition: service_healthy
@@ -57,8 +48,8 @@ services:
       - ./data:/app/data
       # JWT 签名密钥（当前密钥仅 32 字节）；容器重建后会话仍然有效。
       - ./keys:/app/keys
-      # skills/ 与 go-shim.py 已经打进镜像（Dockerfile COPY），不再从宿主机挂载。
-      # 修改它们需要重新构建并推送镜像（CI 会自动构建多架构镜像）。
+      # skills/ 已经打进镜像（Dockerfile COPY），不再从宿主机挂载。
+      # 修改它需要重新构建并推送镜像（CI 会自动构建多架构镜像）。
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8787/api/health"]
       interval: 30s
