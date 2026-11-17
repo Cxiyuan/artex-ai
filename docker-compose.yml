@@ -5,6 +5,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-apagent}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env 设置 POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-apagent}
+      # 容器时区：date / 日志 / psql 输出都用中国时间。tzdata 已在镜像内。
+      TZ: Asia/Shanghai
+    # PostgreSQL 的 timezone 是 GUC，不会跟着 TZ 走（而且这个数据卷是在 UTC 下
+    # initdb 的），所以在启动参数上显式覆盖：now()、日志时间戳才是 +08。
+    command: ["postgres", "-c", "timezone=Asia/Shanghai", "-c", "log_timezone=Asia/Shanghai"]
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -38,6 +43,9 @@ services:
       # JWT 签名密钥目录。必须落在持久化卷里，否则每次重建容器都会重新生成密钥，
       # 把所有已登录会话踢下线（数据与管理员密码不受影响，但要重新登录）。
       APAGENT_KEY_DIR: /app/keys
+      # 容器时区。Go 的 time.Local（日志时间戳、prompt 里的 {{.Now}}、任务超时
+      # 判定用的 wall clock 文案）都取自它；镜像里已带 tzdata 与 /etc/localtime。
+      TZ: Asia/Shanghai
     ports:
       - "8787:8787"
       - "127.0.0.1:8788:8788"

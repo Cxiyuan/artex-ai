@@ -14,12 +14,20 @@ FROM python:3.12-slim-bookworm
 ARG TARGETARCH
 # 常用工具：ripgrep / curl / vim，加一批 recon 常备件（按需增删）。
 # Node 从 NodeSource 装 20.x：bookworm 自带的 apt nodejs 是 18，Playwright 要求 >=20。
+# 时区固定中国时间：tzdata 显式列进安装清单（基础镜像自带，但不赌上游变更），
+# 并把 /etc/localtime 与 /etc/timezone 指向 Asia/Shanghai —— glibc 靠前者，
+# Go 的 time.Local 靠 TZ/前沿 zoneinfo，两条路都要通。
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates ripgrep curl wget vim git jq unzip \
+      ca-certificates tzdata ripgrep curl wget vim git jq unzip \
       dnsutils iputils-ping netcat-openbsd inetutils-telnet whois nmap \
+    && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y --no-install-recommends nodejs \
     && rm -rf /var/lib/apt/lists/*
+# 容器默认时区。compose 也会再显式传一次（两侧一致性：镜像自带的 docker run
+# 与编排部署必须得到同一个时区，否则日志与 prompt 里的时间会差 8 小时）。
+ENV TZ=Asia/Shanghai
 # 预装 Playwright MCP 与 CLI（全局），运行时不再 npx 联网下载。
 # @playwright/mcp：browser MCP 直接 `npx @playwright/mcp`（已全局装好，无需 -y/@latest）。
 # @playwright/cli：提供 playwright-cli，装完顺带 --help 验证可执行。

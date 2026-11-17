@@ -4,6 +4,13 @@
 
 ## [Unreleased]
 
+### 部署
+
+#### 新增的功能
+
+- **容器时区固定为 Asia/Shanghai**：镜像里 `ENV TZ=Asia/Shanghai`，并把 `/etc/localtime`、`/etc/timezone` 指向 `Asia/Shanghai`，`tzdata` 显式列入安装清单（不再依赖基础镜像碰巧带）。此前镜像与编排都没设时区，`date`、Go 日志时间戳、prompt 里的 `{{.Now}}` 全是 UTC，排查"任务什么时候跑的"要自己换算 8 小时。
+- **PostgreSQL 的 GUC 单独覆盖**：`timezone` 不会跟着 `TZ` 环境变量走（而且既有数据卷是在 UTC 下 initdb 的），因此在 compose 里用 `-c timezone=Asia/Shanghai -c log_timezone=Asia/Shanghai` 启动，`now()`、`psql` 输出与容器日志同为 +08。改时区要同时动 `Dockerfile` 的 `ENV TZ`、compose 里两处 `TZ` 与这条 `-c`，三处保持一致。
+
 ### LLM 配置
 
 #### 新增的功能

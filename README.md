@@ -96,6 +96,8 @@ docker compose up -d          # 拉 ghcr.io/cxiyuan/artex-ai:latest + postgres
 
 镜像已含常用工具（ripgrep/curl/vim/npm/nmap…）以及 `skills/`；只有 `./data`（运行数据）与 `./keys`（JWT 密钥）以绑定挂载持久化。
 
+两个容器的时区都固定为 **Asia/Shanghai**：镜像里 `ENV TZ=Asia/Shanghai` 且 `/etc/localtime`、`/etc/timezone` 已指向它（`date`、Go 的日志时间戳、prompt 里的 `{{.Now}}` 都是 CST）；PostgreSQL 另用启动参数 `-c timezone=Asia/Shanghai -c log_timezone=Asia/Shanghai` 覆盖 GUC（它不会跟着 `TZ` 走），所以 `now()`、容器日志也是 +08。要换时区就同时改 `Dockerfile` 的 `ENV TZ`、`docker-compose.yml` 里两处 `TZ` 与 postgres 的 `-c timezone=…`，三处保证一致。
+
 远程 MCP 可在系统设置中选择 `http`（Streamable HTTP）或 `sse`（旧版 SSE）。
 旧版 SSE 服务通常使用 `GET /sse` 建立事件流，再通过服务返回的
 `/message?sessionId=...` 接收 JSON-RPC 请求；配置时将 URL 填为 `/sse`，请求头按
