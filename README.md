@@ -221,7 +221,13 @@ CGO_ENABLED=0 go build -tags embedui -o apagent ./cmd/apagent
 **LLM**：`export ANTHROPIC_API_KEY=sk-...`（或 `OPENAI_API_KEY`），也可在 UI 的「LLM 配置」页填写。
 可选：`APAGENT_LLM_PROVIDER` / `APAGENT_LLM_MODEL` / `APAGENT_LLM_BASE_URL` / `APAGENT_LLM_PROXY`。
 
-**OpenCode Go**：镜像内置 `go-shim.py`，容器启动时监听 `127.0.0.1:8399`。在 UI 里新建/编辑 LLM 配置：`provider=openai`、`base_url=http://127.0.0.1:8399`、`model=glm-5.3-flash`（或其他支持 OpenAI chat/completions 的模型），并把「自定义会话头」设为 `x-opencode-session`。`beam-free` 在中国大陆/港澳不可用，不要设为默认。
+**Magpie（本机模型网关）**：[magpie](https://github.com/yetone/magpie) 在本机跑一个网关（默认 `127.0.0.1:3425`），把 OpenAI Chat Completions / OpenAI Responses / Anthropic Messages 三种协议翻译到你添加的订阅或 API Key，额度用尽时自动换下一个账号。在「LLM 配置」→「新建」里先选预置模板 **Magpie 本地网关（OpenAI Chat）**，它会填好：
+
+- 格式 `OpenAI (Chat Completions)`、Base URL `http://127.0.0.1:3425/v1`、API Key `magpie`（网关只监听本机，token 不校验内容）；
+- 模型填 **`provider/model`**，例如 `deepseek/deepseek-v4-pro`、`moonshot/kimi-k2.5`；填 `group/<id>` 走 magpie 的路由组，可跨账号/跨厂商故障转移。
+- 点模型输入框右侧的刷新按钮即可拉取 magpie 当前可用的模型列表（`GET /v1/models`）。
+
+想保留 Anthropic 协议原样转发（thinking / cache 字段）就选 **Magpie 本地网关（Anthropic Messages）**：格式 `Anthropic` + Base URL `http://127.0.0.1:3425`；走 ChatGPT / Codex 订阅则选 **Magpie 本地网关（OpenAI Responses）**。magpie 若开了「Share on local network」，把 Base URL 换成 `http://<magpie 主机>:3425/v1`，此时 API Key 要填它签发的 gateway key，不能再用 `magpie` 占位。
 
 **并发**：每个任务的 work agent 数在「系统设置」里配置（默认 3）。
 

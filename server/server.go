@@ -904,6 +904,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/llm/pool", s.pgLLMPoolStatus)
 	mux.HandleFunc("POST /api/llm/pool/reset", s.pgLLMPoolReset)
 	mux.HandleFunc("POST /api/llm/models", s.pgListModels)
+	// 表单预置模板：只返回「该怎么填」（格式/Base URL/Key/模型名），不碰库。
+	mux.HandleFunc("GET /api/llm/presets", s.llmPresets)
 
 	// 拦截规则管理
 	mux.HandleFunc("GET /api/intercept/rules", s.interceptListRules)

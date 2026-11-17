@@ -2260,6 +2260,23 @@ function route(m: string, path: string, seg: string[], q: URLSearchParams, b: Re
   if (path === "/llm/profiles" && m === "GET") return { profiles: D.llmProfiles };
   if (path === "/llm/profiles" && m === "POST") return { id: Number(b.id) || 3 };
   if (path === "/llm/profiles/active") return { ok: true };
+  // 预置模板（mock 只留一条，够演示表单预填）：
+  if (path === "/llm/presets" && m === "GET")
+    return {
+      presets: [
+        {
+          id: "magpie",
+          label: "Magpie 本地网关（OpenAI Chat）",
+          format: "openai",
+          base_url: "http://127.0.0.1:3425/v1",
+          api_key: "magpie",
+          model_placeholder: "deepseek/deepseek-v4-pro",
+          model_hint: "provider/model，如 deepseek/deepseek-v4-pro",
+          notes: "magpie 在本机跑一个网关（默认 127.0.0.1:3425），Key 填 magpie 即可。",
+          doc_url: "https://github.com/yetone/magpie",
+        },
+      ],
+    };
   if (path === "/llm/pool" && m === "GET") return D.llmPool;
   if (path === "/llm/pool/reset")
     return { ...D.llmPool, chain: D.llmPool.chain.map((c) => ({ ...c, state: "ok", fails: 0, cooldown_secs: 0 })) };

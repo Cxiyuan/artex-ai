@@ -1988,11 +1988,19 @@ func (s *Server) pgListModels(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err.Error())
 		return
 	}
-	// Resolve API key: form input > profile stored key.
+	// Resolve API key: form input > profile stored key > 预置的占位 token。
+	// 最后一档是给本机网关（magpie）留的：它要求请求带上一个 token，但 loopback 上
+	// 不校验内容，用户没有真 Key 可填。若这里直接报「未提供 API Key」，用户刚点完预置
+	// 就点刷新会拿到一个死胡同，所以按 Base URL 回落到预置值。
 	apiKey := strings.TrimSpace(req.APIKey)
 	if apiKey == "" && req.ProfileID != nil {
 		if p, err := s.m.pg.ProfileByID(*req.ProfileID); err == nil && p != nil {
 			apiKey = p.APIKey
+		}
+	}
+	if apiKey == "" {
+		if k, ok := presetKeyForBaseURL(req.BaseURL); ok {
+			apiKey = k
 		}
 	}
 	if apiKey == "" {

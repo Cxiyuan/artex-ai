@@ -1058,6 +1058,24 @@ export interface LLMProfile {
   retry?: LLMRetryOverride;
 }
 
+// LLMPreset 是「新建模型配置」表单的预置模板（GET /api/llm/presets）。它只描述
+// 一个端点该怎么填，不是已存配置——点选后表单各字段仍可修改，保存仍走 llm_profiles。
+export interface LLMPreset {
+  id: string;
+  label: string;
+  format: "openai" | "anthropic" | "openai-responses";
+  // 等价于 norma 拼端点路径的那一段：openai → +/chat/completions，
+  // openai-responses → +/responses，anthropic → +/v1/messages。
+  base_url: string;
+  // 预填的 token。空 = 必须粘贴真实 Key；非空 = 本机网关的占位值（不校验内容）。
+  api_key: string;
+  model_placeholder: string;
+  // 模型名格式说明（如 magpie 的 provider/model），是预置里最容易填错的一项。
+  model_hint: string;
+  notes: string;
+  doc_url?: string;
+}
+
 // ---- LLM 重试策略 ----
 // 一层重试的两个旋钮。两者都是「0 = 未配置」：
 //   attempts    0=用默认次数 | -1=关闭该层重试 | >0=重试次数

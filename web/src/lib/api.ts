@@ -55,6 +55,7 @@ import type {
   JudgeConfig,
   JudgeUsage,
   LLMPoolStatus,
+  LLMPreset,
   LLMProfile,
   LLMRecordDetail,
   LLMRecordItem,
@@ -994,6 +995,9 @@ export const api = {
       proxy,
       profile_id,
     }),
+  // 表单预置模板（其中置顶的是本机 magpie 网关）：只返回「该怎么填」，
+  // 点选后由前端灌进表单，保存仍是普通 profile。
+  llmPresets: () => get<{ presets: LLMPreset[] }>("/llm/presets").then((r) => arr(r.presets)),
 
   // ---- agents ----
   agents: () => get<{ agents: Agent[] }>("/agents").then((r) => arr(r.agents)),

@@ -4,6 +4,19 @@
 
 ## [Unreleased]
 
+### LLM 配置
+
+#### 新增的功能
+
+- **支持 [magpie](https://github.com/yetone/magpie) 本机模型网关**：magpie 在本机跑一个网关（默认 `127.0.0.1:3425`），把 OpenAI Chat Completions / OpenAI Responses / Anthropic Messages 三种协议翻译到用户添加的订阅或 API Key，并在额度耗尽时自动切换账号。本项目的 planner / worker / 主 agent、对话、目标拆解与冷节点压缩都走同一套 provider，因此在 LLM 配置里建一条 magpie 配置即可全局生效。
+- **新增「预置模板」**：`GET /api/llm/presets` 暴露一组端点模板，「新建模型配置」抽屉里下拉选择后一键填好格式 / Base URL / Key / 模型示例。置顶三条是 magpie 的三个协议入口（OpenAI Chat 为默认入口；Anthropic Messages 保留 thinking/cache 原样转发；OpenAI Responses 接 ChatGPT/Codex 订阅），另附 Anthropic 与 OpenAI 官方端点作对照。预置只填表单、不建配置，保存仍落 `llm_profiles`，所以以后调整预置列表不会动到已存配置。
+- **模型列表兼容本机网关**：magpie 要求请求带 token 但 loopback 上不校验内容，此前不填 Key 时「加载模型」直接报「未提供 API Key」，刚选完预置就撞上死胡同。现在 `POST /api/llm/models` 在 Key 为空时按 Base URL 回落到预置声明的占位 token（仅限预置带了 `api_key` 的条目，官方端点不受影响）；Base URL 末尾带不带 `/`、是否误粘了 `/chat/completions` 或 `/v1/messages` 都能正确匹配。
+
+#### 说明
+
+- 模型名格式由 magpie 决定：`provider/model`（如 `deepseek/deepseek-v4-pro`、`moonshot/kimi-k2.5`），或 `group/<id>` 走路由组实现跨账号 / 跨厂商故障转移。也就是说额度切换由 magpie 负责，本项目这边的 LLM 轮询（`llm_pool_enabled`）不必为同一批账号再配一份 profile。
+- 跨机共享（magpie 的 *Share on local network*）时 Base URL 换成 `http://<magpie 主机>:3425/v1`，API Key 必须填它签发的 gateway key；占位 token `magpie` 只在 loopback 上有效。
+
 ## [0.3.15] - 2026-10-07
 
 ### 拦截

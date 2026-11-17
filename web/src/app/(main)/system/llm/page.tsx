@@ -27,7 +27,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import type { LLMPoolMember, LLMPoolStatus, LLMProfile, LLMRetryOverride } from "@/lib/types";
+import type { LLMPoolMember, LLMPoolStatus, LLMPreset, LLMProfile, LLMRetryOverride } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { ProfileRetryFields, RetryPolicyPanel, ZERO_OVERRIDE } from "./_components/retry";
@@ -334,6 +334,33 @@ function ProfileSheet({
   const [models, setModels] = React.useState<string[]>([]);
   const [loadingModels, setLoadingModels] = React.useState(false);
   const [modelsOpen, setModelsOpen] = React.useState(false);
+  // 预置模板：目录来自后端（GET /api/llm/presets），选中后只灌表单不落库。
+  const [presets, setPresets] = React.useState<LLMPreset[]>([]);
+  const [presetId, setPresetId] = React.useState("");
+  const activePreset = React.useMemo(() => presets.find((p) => p.id === presetId), [presets, presetId]);
+
+  // 目录是静态的，开抽屉时取一次即可；取不到（后端旧版本/离线 mock）就整块不渲染，
+  // 表单照常手填。
+  React.useEffect(() => {
+    if (!open) return;
+    api
+      .llmPresets()
+      .then(setPresets)
+      .catch(() => setPresets([]));
+  }, [open]);
+
+  // applyPreset 把预置灌进表单。只覆盖"端点身份"这几项：名称/模型留空才填，
+  // Key 只有预置带了占位值时才填——否则会把用户已粘贴的真 Key 冲掉。
+  const applyPreset = (id: string) => {
+    const p = presets.find((x) => x.id === id);
+    if (!p) return;
+    setPresetId(id);
+    setFormat(p.format);
+    setBaseUrl(p.base_url);
+    if (!name.trim()) setName(p.label);
+    if (p.api_key) setApiKey(p.api_key);
+    if (!model.trim()) setModel(p.model_placeholder);
+  };
 
   // 每次打开时从传入的 profile 灌一遍表单（新建则重置为默认值）。抽屉关掉再打开
   // 就是一次干净的开始，不会留下上一个配置的残影。
@@ -360,6 +387,7 @@ function ProfileSheet({
     setKeyHint(profile?.api_key_hint ?? "");
     setModels([]);
     setModelsOpen(false);
+    setPresetId(""); // 预置只在新建时用；重开抽屉不保留上一次的选择
   }, [open, profile]);
 
   const profileId = profile ? Number(profile.id) : undefined;
@@ -480,6 +508,44 @@ function ProfileSheet({
         </SheetHeader>
 
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
+          {/* 预置模板：只填表单、不落库。新建时给一条「装上就能用」的起点（本机
+              magpie 网关置顶），编辑已有配置时不出现——那会把用户手填的值覆盖掉。 */}
+          {isNew && presets.length > 0 && (
+            <div className="grid gap-2 rounded-lg border bg-muted/30 p-3">
+              <div className="flex items-center justify-between gap-3">
+                <Label className="text-sm">预置模板</Label>
+                <Select value={presetId} onValueChange={applyPreset}>
+                  <SelectTrigger className="h-8 w-60 shrink-0 text-xs">
+                    <SelectValue placeholder="选择端点（可选）" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {presets.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              {activePreset && (
+                <div className="grid gap-1">
+                  <p className="text-muted-foreground text-xs">{activePreset.model_hint}</p>
+                  <p className="text-muted-foreground text-xs">{activePreset.notes}</p>
+                  {activePreset.doc_url && (
+                    <a
+                      className="text-xs text-primary underline underline-offset-2"
+                      href={activePreset.doc_url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {activePreset.doc_url}
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="grid gap-2">
               <Label htmlFor="p-name">名称</Label>
